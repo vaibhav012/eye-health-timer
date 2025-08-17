@@ -1,0 +1,84 @@
+/* overlay.css */
+/* Full screen semi transparent overlay with centered box and animated circular progress */
+#break-reminder-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: grid;
+  place-items: center;
+  z-index: 2147483647;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+#break-reminder-overlay .bro-box {
+  background: rgba(20,20,20,0.85);
+  color: #fff;
+  padding: 24px 28px;
+  border-radius: 16px;
+  width: min(92vw, 420px);
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+  backdrop-filter: blur(2px);
+}
+
+#break-reminder-overlay .bro-title {
+  font-size: 20px;
+  margin-bottom: 16px;
+}
+
+#break-reminder-overlay .bro-ring {
+  margin: 0 auto 8px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background:
+    conic-gradient(#ffffff 0turn, #ffffff 0.0turn, rgba(255,255,255,0.2) 0.0turn);
+  mask: radial-gradient(circle 60px at 50% 50%, transparent 60px, #000 61px);
+  animation: bro-spin linear var(--bro-duration, 20s) forwards;
+}
+
+@keyframes bro-spin {
+  from {
+    background: conic-gradient(#ffffff 0turn, rgba(255,255,255,0.2) 0.0turn);
+  }
+  to {
+    background: conic-gradient(#ffffff 1turn, rgba(255,255,255,0.2) 1.0turn);
+  }
+}
+
+#break-reminder-overlay .bro-time {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+#break-reminder-overlay .bro-skip {
+  cursor: pointer;
+  font-size: 14px;
+  border: 0;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #111;
+  transition: transform .08s ease, box-shadow .08s ease, background .2s ease;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+
+#break-reminder-overlay .bro-skip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+}
+
+#break-reminder-overlay .bro-skip:active {
+  transform: translateY(0);
+}
+
+/* Smooth fade in */
+#break-reminder-overlay {
+  animation: bro-fade-in 160ms ease;
+}
+@keyframes bro-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

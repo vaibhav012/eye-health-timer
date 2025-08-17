@@ -1,0 +1,34 @@
+<!-- popup.html -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Break Reminder</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="title">Break Reminder</div>
+        <div id="statusChip" class="chip">Paused</div>
+      </header>
+
+      <div class="timer">
+        <div class="label">Time until next break</div>
+        <div id="countdown" class="count">--:--</div>
+      </div>
+
+      <div class="actions">
+        <button id="startBtn">Start Timer</button>
+        <button id="pauseBtn" class="secondary">Pause Timer</button>
+        <button id="resetBtn" class="danger">Reset Timer</button>
+      </div>
+
+      <footer>
+        20 minutes work. 20 seconds break.
+      </footer>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>
