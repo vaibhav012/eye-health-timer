@@ -1,115 +1,166 @@
-// background.js
-// Service worker for timing and state coordination
-// Uses chrome.alarms for reliable timing and chrome.storage for state.
-// Default cycle: 20 minutes of work, then 20 second overlay break.
+// background.js — Service Worker (MV3)
+// Orchestrates the 20-20-20 timer using chrome.alarms (survives SW sleep)
 
-const ALARM_NAME = 'breakAlarm';
-const WORK_INTERVAL_MIN = 20;
-const BREAK_DURATION_SEC = 20;
+const WORK_ALARM = 'work-phase-end';
+const WORK_DURATION_MIN = 20;
+const REST_DURATION_SEC = 20;
 
-// Initialize state in storage if missing
-async function initState() {
-  const { running } = await chrome.storage.local.get({ running: false });
-  if (running) {
-    // Ensure an alarm exists
-    const alarm = await chrome.alarms.get(ALARM_NAME);
-    if (!alarm) {
-      await scheduleAlarm(WORK_INTERVAL_MIN);
-    }
-  } else {
-    // Not running. Clear any stray alarm to be safe.
-    await chrome.alarms.clear(ALARM_NAME);
-  }
-  await chrome.storage.local.set({ breakDurationSec: BREAK_DURATION_SEC });
+// ── State helpers ──────────────────────────────────────────────────────────
+
+async function getState() {
+  const data = await chrome.storage.local.get(['running', 'phase', 'phaseStartedAt']);
+  return {
+    running: data.running ?? false,
+    phase: data.phase ?? 'work',
+    phaseStartedAt: data.phaseStartedAt ?? null,
+  };
 }
 
-async function scheduleAlarm(delayMinutes) {
-  const when = Date.now() + delayMinutes * 60 * 1000;
-  await chrome.alarms.create(ALARM_NAME, { when });
-  await chrome.storage.local.set({ running: true, nextWhen: when });
+async function setState(updates) {
+  await chrome.storage.local.set(updates);
 }
+
+async function clearState() {
+  await chrome.storage.local.remove(['running', 'phase', 'phaseStartedAt']);
+}
+
+// ── Timer lifecycle ────────────────────────────────────────────────────────
 
 async function startTimer() {
-  // If already running, do nothing
-  const alarm = await chrome.alarms.get(ALARM_NAME);
-  if (alarm) {
-    const nextWhen = alarm.scheduledTime;
-    await chrome.storage.local.set({ running: true, nextWhen });
-    return;
-  }
-  await scheduleAlarm(WORK_INTERVAL_MIN);
+  const now = Date.now();
+  await setState({ running: true, phase: 'work', phaseStartedAt: now });
+  await chrome.alarms.clear(WORK_ALARM);
+  chrome.alarms.create(WORK_ALARM, { delayInMinutes: WORK_DURATION_MIN });
 }
 
-async function pauseTimer() {
-  await chrome.alarms.clear(ALARM_NAME);
-  await chrome.storage.local.set({ running: false, nextWhen: null });
+async function stopTimer() {
+  await clearState();
+  await chrome.alarms.clear(WORK_ALARM);
+  broadcastToAllTabs({ action: 'hide-overlay' });
 }
 
-async function resetTimer() {
-  await chrome.alarms.clear(ALARM_NAME);
-  await scheduleAlarm(WORK_INTERVAL_MIN);
+async function startRestPhase() {
+  const now = Date.now();
+  await setState({ phase: 'rest', phaseStartedAt: now });
+
+  // Reschedule next work-phase-end immediately so the alarm is set
+  // while we handle the rest phase client-side (alarms can't do < 1 min reliably)
+  await chrome.alarms.clear(WORK_ALARM);
+  chrome.alarms.create(WORK_ALARM, { delayInMinutes: WORK_DURATION_MIN });
+
+  broadcastToAllTabs({ action: 'show-overlay', duration: REST_DURATION_SEC });
 }
 
-async function showOverlayOnActiveTab() {
-  // Find the active tab in the focused window
-  const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (tabs && tabs[0] && tabs[0].id !== undefined) {
+async function onRestPhaseComplete() {
+  // content.js calls this after 20s countdown; transition back to work
+  const now = Date.now();
+  await setState({ phase: 'work', phaseStartedAt: now });
+  // The alarm for the next work phase was already set in startRestPhase()
+}
+
+// ── Broadcast ──────────────────────────────────────────────────────────────
+
+async function broadcastToAllTabs(msg) {
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (!tab.id || !tab.url) continue;
+    // Skip chrome:// and other restricted pages
+    if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('about:')) {
+      continue;
+    }
     try {
-      await chrome.tabs.sendMessage(tabs[0].id, { type: 'SHOW_OVERLAY', durationSec: BREAK_DURATION_SEC });
-    } catch (e) {
-      // Content script may not be ready on some special pages
-      console.warn('Failed to send SHOW_OVERLAY to tab. It may be a restricted page or not ready yet.', e);
+      await chrome.tabs.sendMessage(tab.id, msg);
+    } catch {
+      // Tab may not have content script yet (e.g. new tab page, PDF)
+      // Try injecting the script and CSS then retry
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js'],
+        });
+        await chrome.scripting.insertCSS({
+          target: { tabId: tab.id },
+          files: ['overlay.css'],
+        });
+        await chrome.tabs.sendMessage(tab.id, msg);
+      } catch {
+        // Silently skip tabs we can't reach (PDFs, sandboxed pages, etc.)
+      }
     }
   }
 }
 
-// Handle the alarm firing
+// ── Event: Alarm ───────────────────────────────────────────────────────────
+
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name !== ALARM_NAME) return;
+  if (alarm.name !== WORK_ALARM) return;
+  const state = await getState();
+  if (!state.running) return;
 
-  // When the work interval ends, trigger overlay on active tab
-  await showOverlayOnActiveTab();
-
-  // Schedule the next cycle immediately for 20 minutes later
-  await scheduleAlarm(WORK_INTERVAL_MIN);
+  // Alarm fires when work phase ends — start rest phase
+  await startRestPhase();
 });
 
-// Listen for messages from popup
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+// ── Event: Messages from popup / content scripts ───────────────────────────
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
-    if (msg && msg.type === 'START_TIMER') {
-      await startTimer();
-      sendResponse({ ok: true });
-    } else if (msg && msg.type === 'PAUSE_TIMER') {
-      await pauseTimer();
-      sendResponse({ ok: true });
-    } else if (msg && msg.type === 'RESET_TIMER') {
-      await resetTimer();
-      sendResponse({ ok: true });
-    } else if (msg && msg.type === 'GET_STATUS') {
-      const alarm = await chrome.alarms.get(ALARM_NAME);
-      const { running } = await chrome.storage.local.get({ running: false });
-      let timeRemainingMs = null;
-      if (alarm) {
-        timeRemainingMs = Math.max(0, alarm.scheduledTime - Date.now());
+    switch (msg.action) {
+      case 'start-timer':
+        await startTimer();
+        sendResponse({ ok: true });
+        break;
+
+      case 'stop-timer':
+        await stopTimer();
+        sendResponse({ ok: true });
+        break;
+
+      case 'get-status': {
+        const state = await getState();
+        sendResponse(state);
+        break;
       }
-      sendResponse({
-        ok: true,
-        running,
-        timeRemainingMs
-      });
+
+      case 'rest-complete':
+        await onRestPhaseComplete();
+        sendResponse({ ok: true });
+        break;
+
+      default:
+        sendResponse({ error: 'unknown action' });
     }
   })();
-  return true; // Keep message channel open for async sendResponse
+  // Return true to keep the message channel open for async sendResponse
+  return true;
 });
 
-// Recreate or clear alarm on startup or install as needed
-chrome.runtime.onInstalled.addListener(initState);
-chrome.runtime.onStartup.addListener(initState);
+// ── Event: Tab loaded while rest phase is active ───────────────────────────
 
-// For safety, update nextWhen when alarms are created
-chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name === ALARM_NAME) {
-    // next alarm scheduled in handler above
-  }
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status !== 'complete') return;
+  if (!tab.url) return;
+  if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('about:')) return;
+
+  const state = await getState();
+  if (!state.running || state.phase !== 'rest') return;
+
+  const elapsed = Math.floor((Date.now() - state.phaseStartedAt) / 1000);
+  const remaining = Math.max(REST_DURATION_SEC - elapsed, 0);
+  if (remaining <= 0) return;
+
+  // Give the page a moment to initialize content scripts
+  setTimeout(async () => {
+    try {
+      await chrome.tabs.sendMessage(tabId, { action: 'show-overlay', duration: remaining });
+    } catch {
+      try {
+        await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+        await chrome.scripting.insertCSS({ target: { tabId }, files: ['overlay.css'] });
+        await chrome.tabs.sendMessage(tabId, { action: 'show-overlay', duration: remaining });
+      } catch {
+        // Silently skip
+      }
+    }
+  }, 500);
 });

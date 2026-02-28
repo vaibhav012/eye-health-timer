@@ -1,34 +1,198 @@
-<!-- popup.html -->
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Break Reminder</title>
-    <link rel="stylesheet" href="popup.css" />
-  </head>
-  <body>
-    <div class="wrap">
-      <header>
-        <div class="title">Break Reminder</div>
-        <div id="statusChip" class="chip">Paused</div>
-      </header>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>20-20-20 Eye Rest Timer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-      <div class="timer">
-        <div class="label">Time until next break</div>
-        <div id="countdown" class="count">--:--</div>
-      </div>
+    body {
+      width: 280px;
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 20px;
+      user-select: none;
+    }
 
-      <div class="actions">
-        <button id="startBtn">Start Timer</button>
-        <button id="pauseBtn" class="secondary">Pause Timer</button>
-        <button id="resetBtn" class="danger">Reset Timer</button>
-      </div>
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
 
-      <footer>
-        20 minutes work. 20 seconds break.
-      </footer>
+    .header svg {
+      flex-shrink: 0;
+    }
+
+    .header-text h1 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #e6edf3;
+      line-height: 1.2;
+    }
+
+    .header-text p {
+      font-size: 11px;
+      color: #8b949e;
+      margin-top: 2px;
+    }
+
+    .phase-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    .phase-badge.work {
+      background: rgba(66, 133, 244, 0.15);
+      color: #4285f4;
+      border: 1px solid rgba(66, 133, 244, 0.3);
+    }
+
+    .phase-badge.rest {
+      background: rgba(52, 199, 89, 0.15);
+      color: #34c759;
+      border: 1px solid rgba(52, 199, 89, 0.3);
+    }
+
+    .phase-badge.stopped {
+      background: rgba(139, 148, 158, 0.15);
+      color: #8b949e;
+      border: 1px solid rgba(139, 148, 158, 0.3);
+    }
+
+    .phase-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: blink 1.4s ease-in-out infinite;
+    }
+
+    .phase-badge.stopped .phase-dot {
+      animation: none;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .countdown {
+      font-size: 52px;
+      font-weight: 800;
+      color: #e6edf3;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      margin-bottom: 6px;
+      letter-spacing: -2px;
+    }
+
+    .countdown.rest-phase {
+      color: #34c759;
+    }
+
+    .phase-label {
+      font-size: 12px;
+      color: #8b949e;
+      margin-bottom: 20px;
+    }
+
+    .progress-wrap {
+      width: 100%;
+      height: 4px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .progress-bar {
+      height: 4px;
+      background: linear-gradient(90deg, #4285f4, #8ab4f8);
+      border-radius: 2px;
+      transition: width 1s linear;
+    }
+
+    .progress-bar.rest {
+      background: linear-gradient(90deg, #34c759, #30d158);
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+
+    button:active {
+      transform: scale(0.98);
+      opacity: 0.85;
+    }
+
+    #toggle-btn.start {
+      background: #4285f4;
+      color: #ffffff;
+    }
+
+    #toggle-btn.stop {
+      background: rgba(255, 59, 48, 0.15);
+      color: #ff3b30;
+      border: 1px solid rgba(255, 59, 48, 0.3);
+    }
+
+    .footer {
+      margin-top: 14px;
+      font-size: 11px;
+      color: #484f58;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <svg width="32" height="32" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="32" cy="32" rx="30" ry="18" fill="none" stroke="#8ab4f8" stroke-width="3"/>
+      <circle cx="32" cy="32" r="10" fill="#4285f4"/>
+      <circle cx="32" cy="32" r="5" fill="#0d1117"/>
+      <circle cx="36" cy="28" r="2" fill="#ffffff" opacity="0.8"/>
+    </svg>
+    <div class="header-text">
+      <h1>Eye Rest Timer</h1>
+      <p>20 · 20 · 20 Rule</p>
     </div>
-    <script src="popup.js"></script>
-  </body>
+  </div>
+
+  <div id="phase-badge" class="phase-badge stopped">
+    <span class="phase-dot"></span>
+    <span id="phase-text">Stopped</span>
+  </div>
+
+  <div id="countdown" class="countdown">--:--</div>
+  <div id="phase-label" class="phase-label">Press Start to begin</div>
+
+  <div class="progress-wrap">
+    <div id="progress-bar" class="progress-bar" style="width: 0%"></div>
+  </div>
+
+  <button id="toggle-btn" class="start">Start Timer</button>
+
+  <div class="footer">Every 20 min · 20 sec break · 20 feet away</div>
+
+  <script src="popup.js"></script>
+</body>
 </html>
