@@ -10,10 +10,11 @@
 
   let overlayEl = null;
   let countdownInterval = null;
+  let visibilityListener = null;
 
   // ── Overlay DOM ────────────────────────────────────────────────────────────
 
-  function createOverlay(duration) {
+  function createOverlay(duration, startWhenFocused) {
     // Idempotent: if already showing, update duration and restart countdown
     if (overlayEl) {
       removeOverlay();
@@ -24,16 +25,6 @@
 
     overlayEl.innerHTML = `
       <div class="__eye-rest-inner__">
-        <div class="__eye-rest-icon__">
-          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-            <ellipse cx="32" cy="32" rx="30" ry="18" fill="none" stroke="#8ab4f8" stroke-width="3"/>
-            <circle cx="32" cy="32" r="10" fill="#4285f4"/>
-            <circle cx="32" cy="32" r="5" fill="#1a1a2e"/>
-            <circle cx="36" cy="28" r="2" fill="#ffffff" opacity="0.8"/>
-          </svg>
-        </div>
-        <h1 class="__eye-rest-title__">Time to rest your eyes</h1>
-        <p class="__eye-rest-subtitle__">Look at something <strong>20 feet away</strong></p>
         <div class="__eye-rest-timer__">
           <span id="${COUNTDOWN_ID}">${duration}</span>
           <span class="__eye-rest-unit__">seconds</span>
@@ -57,7 +48,18 @@
       }
     });
 
-    startCountdown(duration);
+    if (startWhenFocused && document.visibilityState !== 'visible') {
+      // Start countdown only when this tab gets focus
+      visibilityListener = function onVisible() {
+        if (document.visibilityState !== 'visible') return;
+        document.removeEventListener('visibilitychange', visibilityListener);
+        visibilityListener = null;
+        startCountdown(duration);
+      };
+      document.addEventListener('visibilitychange', visibilityListener);
+    } else {
+      startCountdown(duration);
+    }
   }
 
   function startCountdown(duration) {
@@ -94,6 +96,10 @@
       clearInterval(countdownInterval);
       countdownInterval = null;
     }
+    if (visibilityListener) {
+      document.removeEventListener('visibilitychange', visibilityListener);
+      visibilityListener = null;
+    }
     if (overlayEl) {
       overlayEl.remove();
       overlayEl = null;
@@ -105,7 +111,7 @@
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     switch (msg.action) {
       case 'show-overlay':
-        createOverlay(msg.duration ?? 20);
+        createOverlay(msg.duration ?? 20, msg.startWhenFocused === true);
         sendResponse({ ok: true });
         break;
       case 'hide-overlay':
@@ -126,7 +132,7 @@
         const elapsed = Math.floor((Date.now() - state.phaseStartedAt) / 1000);
         const remaining = Math.max(20 - elapsed, 0);
         if (remaining > 0) {
-          createOverlay(remaining);
+          createOverlay(remaining, true);
         }
       }
     });

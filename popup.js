@@ -1,6 +1,6 @@
 // popup.js — Extension popup UI logic
 
-const WORK_DURATION_SEC = 20 * 60; // 20 minutes in seconds
+const WORK_DURATION_SEC = 20 * 60; // 1 minute in seconds
 const REST_DURATION_SEC = 20;       // 20 seconds
 
 const phaseBadge   = document.getElementById('phase-badge');

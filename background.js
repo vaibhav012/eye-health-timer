@@ -48,13 +48,18 @@ async function startRestPhase() {
   await chrome.alarms.clear(WORK_ALARM);
   chrome.alarms.create(WORK_ALARM, { delayInMinutes: WORK_DURATION_MIN });
 
-  broadcastToAllTabs({ action: 'show-overlay', duration: REST_DURATION_SEC });
+  broadcastToAllTabs({
+    action: 'show-overlay',
+    duration: REST_DURATION_SEC,
+    startWhenFocused: true,
+  });
 }
 
 async function onRestPhaseComplete() {
   // content.js calls this after 20s countdown; transition back to work
   const now = Date.now();
   await setState({ phase: 'work', phaseStartedAt: now });
+  await broadcastToAllTabs({ action: 'hide-overlay' });
   // The alarm for the next work phase was already set in startRestPhase()
 }
 
@@ -152,12 +157,20 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   // Give the page a moment to initialize content scripts
   setTimeout(async () => {
     try {
-      await chrome.tabs.sendMessage(tabId, { action: 'show-overlay', duration: remaining });
+      await chrome.tabs.sendMessage(tabId, {
+        action: 'show-overlay',
+        duration: remaining,
+        startWhenFocused: true,
+      });
     } catch {
       try {
         await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
         await chrome.scripting.insertCSS({ target: { tabId }, files: ['overlay.css'] });
-        await chrome.tabs.sendMessage(tabId, { action: 'show-overlay', duration: remaining });
+        await chrome.tabs.sendMessage(tabId, {
+          action: 'show-overlay',
+          duration: remaining,
+          startWhenFocused: true,
+        });
       } catch {
         // Silently skip
       }
