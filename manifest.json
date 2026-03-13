@@ -1,51 +1,23 @@
 {
   "manifest_version": 3,
-  "name": "Break Reminder",
+  "name": "20-20-20 Eye Rest Timer",
   "version": "1.0.0",
-  "description": "Pomodoro style break reminder with a 20 minute cycle and a 20 second overlay break.",
-  "permissions": [
-    "alarms",
-    "storage",
-    "tabs"
-  ],
-  "host_permissions": [
-    "<all_urls>"
-  ],
+  "description": "Every 20 minutes, rest your eyes for 20 seconds by looking at something 20 feet away.",
   "background": {
     "service_worker": "background.js"
   },
-  "action": {
-    "default_title": "Break Reminder",
-    "default_popup": "popup.html"
-  },
   "content_scripts": [
     {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "content.js"
-      ],
-      "css": [
-        "overlay.css"
-      ],
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["overlay.css"],
       "run_at": "document_idle"
     }
   ],
-  "icons": {
-    "16": "icons/icon16.png",
-    "32": "icons/icon32.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "20-20-20 Eye Rest Timer"
   },
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "overlay.css"
-      ],
-      "matches": [
-        "<all_urls>"
-      ]
-    }
-  ]
+  "permissions": ["alarms", "tabs", "scripting", "storage"],
+  "host_permissions": ["<all_urls>"]
 }
